@@ -69,7 +69,7 @@ parser.add_argument('--max-epochs', '-E',
                     type = int,
                     help="Maximum number of epochs the function is allowed to train for", 
                     required = False,
-                    default = 50)
+                    default = 100)
 parser.add_argument('--test-size', '-T',
                     type = float,
                     help="Percentage of samples to be used in testing", 
@@ -380,7 +380,7 @@ def Setup_Dataloaders(data_set_train, data_set_test):
     return dataloader_train, dataloader_test
 
 
-def Evaluate(model, dataloader_test):
+def Evaluate(model, dataloader_test, criterion):
     '''
     Perform an evaluation on the Convolution Neural Network using a given test dataloader
 
@@ -389,6 +389,9 @@ def Evaluate(model, dataloader_test):
 
     @param dataloader_test:     The dataloader for the test data set
     @type dataloader_test:      DataLoader
+
+    @param criterion:       The cross entropy loss function calculator
+    @type criterion:        nn.CrossEntropyLoss
 
     @return mean_loss:          The mean value of the loss function for the test samples
     @rtype mean_loss:           float
@@ -427,7 +430,7 @@ def Evaluate(model, dataloader_test):
     return mean_loss, mean_acc
 
 
-def Train_Epoch(model, feature_set, label_set, test_size):
+def Train_Epoch(model, feature_set, label_set, test_size, criterion, optimizer):
     '''
     Trains and evaluates the model for a single epoch
 
@@ -443,6 +446,12 @@ def Train_Epoch(model, feature_set, label_set, test_size):
     @param test_size:       The portion of the samples that should be placed in the
                             test set
     @type test_size:        float
+
+    @param criterion:       The cross entropy loss function calculator
+    @type criterion:        nn.CrossEntropyLoss
+
+    @param optimizer:       The model training optimizer
+    @type optimizer:        optim.Adam
 
     @return loss:           The mean value of the loss function for the test samples
     @rtype loss:            float
@@ -480,11 +489,11 @@ def Train_Epoch(model, feature_set, label_set, test_size):
         optimizer.step()
     
     #Perform evaluation and return evaluation results
-    loss, acc = Evaluate(model, dataloader_test)
+    loss, acc = Evaluate(model, dataloader_test, criterion)
     return loss, acc
 
 
-def Train(model, target_acc, max_epochs, feature_set, label_set, test_size = 0.5):
+def Train(model, target_acc, max_epochs, feature_set, label_set, test_size, criterion, optimizer):
     '''
     Trains and evaluates the model until the target accuracy is achieved
 
@@ -508,6 +517,12 @@ def Train(model, target_acc, max_epochs, feature_set, label_set, test_size = 0.5
                             test set
     @type test_size:        float
 
+    @param criterion:       The cross entropy loss function calculator
+    @type criterion:        nn.CrossEntropyLoss
+
+    @param optimizer:       The model training optimizer
+    @type optimizer:        optim.Adam
+
     @return history:        Dictionary containing the historical accuracy and loss function values of
                             the model training
     @rtype history:         Dict{'loss':list, 'acc':list}
@@ -520,7 +535,7 @@ def Train(model, target_acc, max_epochs, feature_set, label_set, test_size = 0.5
     _, feature_set_test = Scale_Data(feature_set, feature_set)
     _, data_set_test = Create_Data_Sets(feature_set_test, feature_set_test, label_set, label_set)
     _, dataloader_test = Setup_Dataloaders(data_set_test, data_set_test)
-    start_loss, start_acc = Evaluate(model, dataloader_test)
+    start_loss, start_acc = Evaluate(model, dataloader_test, criterion)
     
     history['loss'].append(start_loss)
     history['acc'].append(start_acc)
@@ -534,7 +549,7 @@ def Train(model, target_acc, max_epochs, feature_set, label_set, test_size = 0.5
             break
 
         #Train model
-        epoch_loss, epoch_acc = Train_Epoch(model, feature_set, label_set, test_size)
+        epoch_loss, epoch_acc = Train_Epoch(model, feature_set, label_set, test_size, criterion, optimizer)
 
         history['loss'].append(epoch_loss)
         history['acc'].append(epoch_acc)
@@ -558,17 +573,43 @@ def Train(model, target_acc, max_epochs, feature_set, label_set, test_size = 0.5
 #   Main Function Call
 #----------------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main(filename, max_samples, target_acc, max_epochs, test_size):
+    '''
+    Main function call. Extract data from the specified CSV file, create a model and 
+    train it to the specified standard
+
+    @param filename:        The filepath and filename of the dataset CSV file.
+    @type filename:         String
+
+    @param max_samples:     The maximum number of samples to retrieve from the dataset
+    @type max_samples:      int
+
+    @param target_acc:      The target accuracy of the model. The model will be trained until it
+                            achieves a mean target accuracy over five epochs
+    @type target_acc:       float
+
+    @param max_epochs:      The maximum number of epochs the model will train for before returning
+    @type max_epochs:       int
+
+    @param test_size:       The portion of the samples that should be placed in the
+                            test set
+    @type test_size:        float
+
+    @return model           The Convolution Neural Neural Network that has been trained
+    @rtype model:           Convolution_Net
+    '''
 
     #Fetch data from 
-    features, labels = Fetch_Data_From_CSV(args.filename, args.max_samples)   
+    features, labels = Fetch_Data_From_CSV(filename, max_samples)   
 
     model = Convolution_Net()
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    history = Train(model, args.target_acc, args.max_epochs, features, labels, args.test_size)
+    history = Train(model, target_acc, max_epochs, features, labels, test_size, criterion, optimizer)
+
+    print(history['acc'])
 
     #Plot the historical accuracy in logarithmic scale
     figure = plt.figure(figsize=(8,8))
@@ -577,6 +618,11 @@ if __name__ == "__main__":
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy (%)")
     plt.xlim([0,len(history['acc'])])
-    plt.ylim([0,1.0])
+    plt.ylim([0.0,1.0])
 
+    #Return the model
+    return model
+
+if __name__ == "__main__":
+    main(args.filename, args.max_samples, args.target_acc, args.max_epochs, args.test_size)
     
